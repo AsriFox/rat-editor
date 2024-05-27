@@ -6,19 +6,28 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-utils.url = "github:numtide/flake-utils";
+    nvim.url = "flake:nixvim";
   };
 
-  outputs = { self, nixpkgs, fenix, flake-utils, ... }:
+  outputs = { self, nixpkgs, fenix, flake-utils, nvim, ... }:
   flake-utils.lib.eachDefaultSystem (system:
   let
     overlays = [ fenix.overlays.default ];
     pkgs = import nixpkgs { inherit system overlays; };
-    fenix-toolchain = fenix.packages."${system}".stable;
+    fenix-pkgs = fenix.packages."${system}";
   in {
     devShells.default = pkgs.mkShell {
       buildInputs = [
         pkgs.pkg-config
-        (fenix-toolchain.withComponents [ "cargo" "clippy" "rust-src" "rustc" "rustfmt" ])
+        fenix-pkgs.stable.defaultToolchain
+        (nvim.packages.${system}.default.nixvimExtend {
+          plugins.lsp.servers.rust-analyzer = {
+            enable = true;
+            package = fenix-pkgs.rust-analyzer;
+            installCargo = nixpkgs.lib.mkForce false;
+            installRustc = nixpkgs.lib.mkForce false;
+          };
+        })
       ];
     };
   });
