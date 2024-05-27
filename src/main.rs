@@ -1,11 +1,29 @@
 use std::io;
 
 use crossterm::{
-    execute,
+    execute, queue,
     style, terminal, cursor,
     event::KeyCode,
     ExecutableCommand,
 };
+
+fn queue_reprint<W>(w: &mut W, buffer: &[String]) -> io::Result<()>
+where W: io::Write,
+{
+    queue!(
+        w,
+        terminal::Clear(terminal::ClearType::All),
+        cursor::MoveTo(0, 0),
+    )?;
+    for line in buffer {
+        queue!(
+            w,
+            style::Print(line),
+            cursor::MoveToNextLine(1),
+        )?;
+    }
+    Ok(())
+}
 
 enum EditorState {
     CursorMode,
@@ -101,7 +119,6 @@ impl EditorState
 fn typing_synced<W>(w: &mut W, buf: &mut String) -> io::Result<KeyCode>
 where W: io::Write,
 {
-    w.execute(cursor::MoveToColumn(buf.len() as u16))?;
     let mut state = EditorState::CursorMode;
     loop {
         state = match read_char()? {
@@ -138,7 +155,7 @@ where W: io::Write,
         style::ResetColor,
         terminal::Clear(terminal::ClearType::All),
         cursor::SetCursorStyle::BlinkingBar,
-        cursor::MoveTo(1, 1),
+        cursor::MoveTo(0, 0),
     )?;
 
     let mut buffer = vec![String::new()];
@@ -149,21 +166,43 @@ where W: io::Write,
             KeyCode::Esc => break,
             KeyCode::Up => {
                 if i > 0 {
-                    w.execute(cursor::MoveToPreviousLine(1))?;
+                    let (col, _) = cursor::position()?;
+                    execute!(
+                        w,
+                        cursor::MoveToPreviousLine(1),
+                        cursor::MoveToColumn(col.min(buffer[i - 1].len() as u16)),
+                    )?;
                     i -= 1;
                 }
             }
             KeyCode::Down => {
                 if i < buffer.len() - 1 {
-                    w.execute(cursor::MoveToNextLine(1))?;
+                    let (col, _) = cursor::position()?;
+                    execute!(
+                        w,
+                        cursor::MoveToNextLine(1),
+                        cursor::MoveToColumn(col.min(buffer[i + 1].len() as u16)),
+                    )?;
                     i += 1;
                 }
             }
             KeyCode::Enter => {
-                if i == buffer.len() - 1 {
+                let (col, _) = cursor::position()?;
+                let new_line = if (col as usize) < buffer[i].len() {
+                    buffer[i].split_off(col as usize)
+                } else {
+                    String::new()
+                };
+                if new_line.len() > 0 || i < buffer.len() - 1 {
+                    i += 1;
+                    buffer.insert(i, new_line);
+                    queue_reprint(w, &buffer)?;
+                    queue!(w, cursor::MoveTo(0, i as u16))?;
+                    w.flush()?;
+                } else if i == buffer.len() - 1 {
+                    i += 1;
                     buffer.push(String::new());
                     w.execute(cursor::MoveToNextLine(1))?;
-                    i += 1;
                 }
             }
             _ => {}
