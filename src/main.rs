@@ -121,17 +121,28 @@ where W: io::Write,
 {
     let mut state = EditorState::CursorMode;
     loop {
+        let (col, _) = cursor::position()?;
         state = match read_char()? {
             KeyCode::Char(c) => state.print(w, buf, c)?,
-            KeyCode::Backspace => state.erase_left(w, buf)?,
-            KeyCode::Delete => state.erase_right(w, buf)?,
+            KeyCode::Backspace => {
+                if col == 0 {
+                    return Ok(KeyCode::Backspace);
+                }
+                state.erase_left(w, buf)?
+            }
+            KeyCode::Delete => {
+                if (col as usize) >= buf.len() {
+                    return Ok(KeyCode::Delete);
+                }
+                state.erase_right(w, buf)?
+            }
             KeyCode::Left => {
                 w.execute(cursor::MoveLeft(1))?;
                 state.cursor_mode(buf)?
             }
             KeyCode::Right => {
                 let new_state = state.cursor_mode(buf)?;
-                if (cursor::position()?.0 as usize) < buf.len() {
+                if (col as usize) < buf.len() {
                     w.execute(cursor::MoveRight(1))?;
                 }
                 new_state
@@ -204,6 +215,23 @@ where W: io::Write,
                     buffer.push(String::new());
                     w.execute(cursor::MoveToNextLine(1))?;
                 }
+            }
+            KeyCode::Backspace => {
+                i -= 1;
+                let col = buffer[i].len() as u16;
+                let after = buffer.remove(i + 1);
+                buffer[i].push_str(&after);
+                queue_reprint(w, &buffer)?;
+                queue!(w, cursor::MoveTo(col, i as u16))?;
+                w.flush()?;
+            }
+            KeyCode::Delete => {
+                let col = buffer[i].len() as u16;
+                let after = buffer.remove(i + 1);
+                buffer[i].push_str(&after);
+                queue_reprint(w, &buffer)?;
+                queue!(w, cursor::MoveTo(col, i as u16))?;
+                w.flush()?;
             }
             _ => {}
         };
