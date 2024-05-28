@@ -1,3 +1,5 @@
+mod buffer;
+
 use std::io::{self, prelude::*};
 
 use crossterm::{
@@ -6,24 +8,6 @@ use crossterm::{
     event::KeyCode,
     ExecutableCommand,
 };
-
-fn queue_reprint<W>(w: &mut W, buffer: &[String]) -> io::Result<()>
-where W: io::Write,
-{
-    queue!(
-        w,
-        terminal::Clear(terminal::ClearType::All),
-        cursor::MoveTo(0, 0),
-    )?;
-    for line in buffer {
-        queue!(
-            w,
-            style::Print(line),
-            cursor::MoveToNextLine(1),
-        )?;
-    }
-    Ok(())
-}
 
 enum EditorState {
     CursorMode,
@@ -147,72 +131,45 @@ where W: io::Write,
                 }
                 new_state
             }
-            KeyCode::Up => return Ok(KeyCode::Up),
-            KeyCode::Down => return Ok(KeyCode::Down),
-            KeyCode::Enter => return Ok(KeyCode::Enter),
-            KeyCode::Esc => return Ok(KeyCode::Esc),
-            _ => continue,
+            other => match other {
+                KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown | KeyCode::Enter | KeyCode::Esc => return Ok(other),
+                _ => continue,
+            }
         };
     }
 }
 
-fn run<W>(w: &mut W, buffer: &mut Vec<String>) -> io::Result<()>
+fn run<W>(w: &mut W, lines: Vec<String>) -> io::Result<()>
 where W: io::Write,
 {
     execute!(w, terminal::EnterAlternateScreen)?;
     terminal::enable_raw_mode()?;
 
-    let (_term_width, term_height) = terminal::size()?;
-    let mut scroll_start = 0;
-    let mut scroll_end = buffer.len().min(term_height as usize);
+    let mut buffer = buffer::Buffer::new(lines)?;
 
     queue!(
         w,
         style::ResetColor,
         cursor::SetCursorStyle::BlinkingBar,
     )?;
-    queue_reprint(w, buffer.get(scroll_start..scroll_end).expect("Not enough lines in the buffer"))?;
+    buffer.queue_reprint(w)?;
     queue!(w, cursor::MoveTo(0, 0))?;
     w.flush()?;
 
-    let mut i = 0;
-
     loop {
-        match typing_synced(w, &mut buffer[i])? {
+        match typing_synced(w, buffer.get_line())? {
             KeyCode::Esc => break,
             KeyCode::Up => {
-                if i > 0 {
-                    let (col, _) = cursor::position()?;
-                    
-                    i -= 1;
-                    if i < scroll_start {
-                        scroll_start -= 1;
-                        scroll_end -= 1;
-                        queue_reprint(w, buffer.get(scroll_start..scroll_end).expect("Not enough lines in the buffer"))?;
-                        queue!(w, cursor::MoveToRow(0))?;
-                        w.flush()?;
-                    } else {
-                        w.execute(cursor::MoveToPreviousLine(1))?;
-                    }
-                    w.execute(cursor::MoveToColumn(col.min(buffer[i].len() as u16)))?;
-                }
+                buffer.save_cursor_pos()?;
+                buffer.move_cursor_v(w, -1)?;
             }
             KeyCode::Down => {
-                if i < buffer.len() - 1 {
-                    let (col, _) = cursor::position()?;
-
-                    i += 1;
-                    if i > scroll_end {
-                        scroll_start += 1;
-                        scroll_end += 1;
-                        queue_reprint(w, buffer.get(scroll_start..scroll_end).expect("Not enough lines in the buffer"))?;
-                        w.flush()?;
-                    } else {
-                        w.execute(cursor::MoveToNextLine(1))?;
-                    }
-                    w.execute(cursor::MoveToColumn(col.min(buffer[i].len() as u16)))?;
-                }
+                buffer.save_cursor_pos()?;
+                buffer.move_cursor_v(w, 1)?;
             }
+            KeyCode::PageUp => buffer.scroll(w, -1)?,
+            KeyCode::PageDown => buffer.scroll(w, 1)?,
+            /*
             KeyCode::Enter => {
                 let (col, _) = cursor::position()?;
                 let new_line = if (col as usize) < buffer[i].len() {
@@ -249,6 +206,7 @@ where W: io::Write,
                 queue!(w, cursor::MoveTo(col, i as u16))?;
                 w.flush()?;
             }
+            */
             _ => {}
         };
     }
@@ -280,14 +238,14 @@ pub fn read_char() -> io::Result<KeyCode> {
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let mut buffer = if args.len() >= 2 {
+    let lines = if args.len() >= 2 {
         let file = std::fs::File::open(&args[1])?;
-        let buffer: Vec<String> =
+        let lines: Vec<String> =
             std::io::BufReader::new(file)
             .lines()
             .map(|l| l.expect("Could not parse line"))
             .collect();
-        if buffer.len() == 0 {
+        if lines.len() == 0 {
             return Err(
                 io::Error::new(
                     std::io::ErrorKind::Other,
@@ -295,11 +253,16 @@ fn main() -> io::Result<()> {
                 )
             );
         }
-        buffer
+        lines
     } else {
         vec![String::new()]
     };
 
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("{:?}", info);
+        terminal::disable_raw_mode().unwrap();
+    }));
+
     let mut stdout = io::stdout();
-    run(&mut stdout, &mut buffer)
+    run(&mut stdout, lines)
 }
