@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, prelude::*};
 
 use crossterm::{
     execute, queue,
@@ -156,20 +156,25 @@ where W: io::Write,
     }
 }
 
-fn run<W>(w: &mut W) -> io::Result<()>
+fn run<W>(w: &mut W, buffer: &mut Vec<String>) -> io::Result<()>
 where W: io::Write,
 {
     execute!(w, terminal::EnterAlternateScreen)?;
     terminal::enable_raw_mode()?;
-    execute!(
+
+    let (_term_width, term_height) = terminal::size()?;
+    let mut scroll_start = 0;
+    let mut scroll_end = buffer.len().min(term_height as usize);
+
+    queue!(
         w,
         style::ResetColor,
-        terminal::Clear(terminal::ClearType::All),
         cursor::SetCursorStyle::BlinkingBar,
-        cursor::MoveTo(0, 0),
     )?;
+    queue_reprint(w, buffer.get(scroll_start..scroll_end).expect("Not enough lines in the buffer"))?;
+    queue!(w, cursor::MoveTo(0, 0))?;
+    w.flush()?;
 
-    let mut buffer = vec![String::new()];
     let mut i = 0;
 
     loop {
@@ -263,6 +268,27 @@ pub fn read_char() -> io::Result<KeyCode> {
 }
 
 fn main() -> io::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut buffer = if args.len() >= 2 {
+        let file = std::fs::File::open(&args[1])?;
+        let buffer: Vec<String> =
+            std::io::BufReader::new(file)
+            .lines()
+            .map(|l| l.expect("Could not parse line"))
+            .collect();
+        if buffer.len() == 0 {
+            return Err(
+                io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("File {} is empty", &args[1])
+                )
+            );
+        }
+        buffer
+    } else {
+        vec![String::new()]
+    };
+
     let mut stdout = io::stdout();
-    run(&mut stdout)
+    run(&mut stdout, &mut buffer)
 }
