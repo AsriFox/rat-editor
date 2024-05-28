@@ -183,23 +183,34 @@ where W: io::Write,
             KeyCode::Up => {
                 if i > 0 {
                     let (col, _) = cursor::position()?;
-                    execute!(
-                        w,
-                        cursor::MoveToPreviousLine(1),
-                        cursor::MoveToColumn(col.min(buffer[i - 1].len() as u16)),
-                    )?;
+                    
                     i -= 1;
+                    if i < scroll_start {
+                        scroll_start -= 1;
+                        scroll_end -= 1;
+                        queue_reprint(w, buffer.get(scroll_start..scroll_end).expect("Not enough lines in the buffer"))?;
+                        queue!(w, cursor::MoveToRow(0))?;
+                        w.flush()?;
+                    } else {
+                        w.execute(cursor::MoveToPreviousLine(1))?;
+                    }
+                    w.execute(cursor::MoveToColumn(col.min(buffer[i].len() as u16)))?;
                 }
             }
             KeyCode::Down => {
                 if i < buffer.len() - 1 {
                     let (col, _) = cursor::position()?;
-                    execute!(
-                        w,
-                        cursor::MoveToNextLine(1),
-                        cursor::MoveToColumn(col.min(buffer[i + 1].len() as u16)),
-                    )?;
+
                     i += 1;
+                    if i > scroll_end {
+                        scroll_start += 1;
+                        scroll_end += 1;
+                        queue_reprint(w, buffer.get(scroll_start..scroll_end).expect("Not enough lines in the buffer"))?;
+                        w.flush()?;
+                    } else {
+                        w.execute(cursor::MoveToNextLine(1))?;
+                    }
+                    w.execute(cursor::MoveToColumn(col.min(buffer[i].len() as u16)))?;
                 }
             }
             KeyCode::Enter => {
