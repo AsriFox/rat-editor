@@ -179,8 +179,14 @@ where W: io::Write,
             KeyCode::Esc => break,
             KeyCode::Up => buffer.move_cursor_v(w, -1)?,
             KeyCode::Down => buffer.move_cursor_v(w, 1)?,
-            KeyCode::PageUp => buffer.scroll(w, -1)?,
-            KeyCode::PageDown => buffer.scroll(w, 1)?,
+            KeyCode::PageUp => {
+                let (_, h) = terminal::size()?;
+                buffer.scroll(w, -(h as isize) / 2)?;
+            }
+            KeyCode::PageDown => {
+                let (_, h) = terminal::size()?;
+                buffer.scroll(w, (h as isize) / 2)?;
+            }
             KeyCode::Enter => buffer.newline(w)?,
             KeyCode::Backspace => buffer.delete_newline_before(w)?,
             KeyCode::Delete => buffer.delete_newline_after(w)?,
@@ -229,3 +235,4 @@ fn main() -> io::Result<()> {
     let mut stdout = io::stdout();
     run(&mut stdout, lines)
 }
+
