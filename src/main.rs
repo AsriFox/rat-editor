@@ -103,10 +103,22 @@ impl EditorState
 fn typing_synced<W>(w: &mut W, buf: &mut String) -> io::Result<KeyCode>
 where W: io::Write,
 {
+    use crossterm::event::{read, Event, KeyEvent, KeyEventKind};
     let mut state = EditorState::CursorMode;
     loop {
+        let code = if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Press,
+            modifiers: _,
+            state: _,
+        }) = read()? {
+            code
+        } else {
+            continue;
+        };
+
         let (col, _) = cursor::position()?;
-        state = match read_char()? {
+        state = match code {
             KeyCode::Char(c) => state.print(w, buf, c)?,
             KeyCode::Backspace => {
                 if col == 0 {
@@ -115,7 +127,7 @@ where W: io::Write,
                 state.erase_left(w, buf)?
             }
             KeyCode::Delete => {
-                if (col as usize) >= buf.len() {
+                if (col as usize) > buf.len() {
                     return Ok(KeyCode::Delete);
                 }
                 state.erase_right(w, buf)?
@@ -131,10 +143,13 @@ where W: io::Write,
                 }
                 new_state
             }
-            other => match other {
-                KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown | KeyCode::Enter | KeyCode::Esc => return Ok(other),
-                _ => continue,
+            KeyCode::Up | KeyCode::Down
+            | KeyCode::PageUp | KeyCode::PageDown
+            | KeyCode::Enter | KeyCode::Esc => {
+                let _ = state.cursor_mode(buf)?;
+                return Ok(code);
             }
+            _ => continue,
         };
     }
 }
@@ -157,16 +172,14 @@ where W: io::Write,
     w.flush()?;
 
     loop {
-        match typing_synced(w, buffer.get_line())? {
+        match {
+            let code = typing_synced(w, buffer.get_line())?;
+            buffer.save_cursor_pos()?;
+            code
+        } {
             KeyCode::Esc => break,
-            KeyCode::Up => {
-                buffer.save_cursor_pos()?;
-                buffer.move_cursor_v(w, -1)?;
-            }
-            KeyCode::Down => {
-                buffer.save_cursor_pos()?;
-                buffer.move_cursor_v(w, 1)?;
-            }
+            KeyCode::Up => buffer.move_cursor_v(w, -1)?,
+            KeyCode::Down => buffer.move_cursor_v(w, 1)?,
             KeyCode::PageUp => buffer.scroll(w, -1)?,
             KeyCode::PageDown => buffer.scroll(w, 1)?,
             /*
@@ -220,20 +233,6 @@ where W: io::Write,
 
     terminal::disable_raw_mode()?;
     Ok(())
-}
-
-pub fn read_char() -> io::Result<KeyCode> {
-    use crossterm::event::{read, Event, KeyEvent, KeyEventKind};
-    loop {
-        if let Ok(Event::Key(KeyEvent {
-            code,
-            kind: KeyEventKind::Press,
-            modifiers: _,
-            state: _,
-        })) = read() {
-            return Ok(code);
-        }
-    }
 }
 
 fn main() -> io::Result<()> {
