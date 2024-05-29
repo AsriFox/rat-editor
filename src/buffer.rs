@@ -36,7 +36,7 @@ impl Buffer {
             terminal::Clear(terminal::ClearType::All),
             cursor::MoveTo(0, 0),
         )?;
-        let scroll_bottom = (self.lines.len() - self.scroll_pos).min(self.scroll_pos + self.term_size.1 as usize);
+        let scroll_bottom = (self.scroll_pos + self.term_size.1 as usize).min(self.lines.len());
         let wp = self.lines.get(self.scroll_pos..scroll_bottom).expect("Not enough lines in the buffer");
         for line in wp {
             queue!(
@@ -174,3 +174,4 @@ impl Buffer {
         Ok(())
     }
 }
+
