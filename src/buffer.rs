@@ -140,4 +140,37 @@ impl Buffer {
         }
         Ok(())
     }
+
+    pub fn delete_newline_before<W>(&mut self, w: &mut W) -> Rs<()>
+    where W: Write {
+        let i = self.scroll_pos + self.cursor_pos.1 as usize;
+        if i == 0 {
+            return Ok(());
+        }
+        let i = i - 1;
+        let col = self.lines[i].len() as u16;
+        let after = self.lines.remove(i + 1);
+        self.lines[i].push_str(&after);
+        self.queue_reprint(w)?;
+        queue!(w, cursor::MoveTo(col, self.cursor_pos.1))?;
+        w.flush()?;
+        self.cursor_pos = (col, self.cursor_pos.1);
+        self.move_cursor_v(w, -1)?;
+        Ok(())
+    }
+
+    pub fn delete_newline_after<W>(&mut self, w: &mut W) -> Rs<()>
+    where W: Write {
+        let i = self.scroll_pos + self.cursor_pos.1 as usize;
+        if i >= self.lines.len() - 1 {
+            return Ok(());
+        }
+        w.execute(cursor::SavePosition)?;
+        let after = self.lines.remove(i + 1);
+        self.lines[i].push_str(&after);
+        self.queue_reprint(w)?;
+        queue!(w, cursor::RestorePosition)?;
+        w.flush()?;
+        Ok(())
+    }
 }

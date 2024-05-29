@@ -77,7 +77,7 @@ impl EditorState
             Self::InsertMode { after } => after,
         };
         if after.len() == 0 {
-            return Ok(Self::InsertMode { after });
+            return Ok(Self::CursorMode);
         }
         let (_, after) = after.split_at(1);
         execute!(
@@ -122,15 +122,14 @@ where W: io::Write,
             KeyCode::Char(c) => state.print(w, buf, c)?,
             KeyCode::Backspace => {
                 if col == 0 {
+                    let _ = state.cursor_mode(buf)?;
                     return Ok(KeyCode::Backspace);
                 }
                 state.erase_left(w, buf)?
             }
-            KeyCode::Delete => {
-                if (col as usize) > buf.len() {
-                    return Ok(KeyCode::Delete);
-                }
-                state.erase_right(w, buf)?
+            KeyCode::Delete => match state.erase_right(w, buf)? {
+                EditorState::InsertMode { after } => EditorState::InsertMode { after },
+                EditorState::CursorMode => return Ok(KeyCode::Delete),
             }
             KeyCode::Left => {
                 w.execute(cursor::MoveLeft(1))?;
@@ -183,25 +182,8 @@ where W: io::Write,
             KeyCode::PageUp => buffer.scroll(w, -1)?,
             KeyCode::PageDown => buffer.scroll(w, 1)?,
             KeyCode::Enter => buffer.newline(w)?,
-            /*
-            KeyCode::Backspace => {
-                i -= 1;
-                let col = buffer[i].len() as u16;
-                let after = buffer.remove(i + 1);
-                buffer[i].push_str(&after);
-                queue_reprint(w, &buffer)?;
-                queue!(w, cursor::MoveTo(col, i as u16))?;
-                w.flush()?;
-            }
-            KeyCode::Delete => {
-                let col = buffer[i].len() as u16;
-                let after = buffer.remove(i + 1);
-                buffer[i].push_str(&after);
-                queue_reprint(w, &buffer)?;
-                queue!(w, cursor::MoveTo(col, i as u16))?;
-                w.flush()?;
-            }
-            */
+            KeyCode::Backspace => buffer.delete_newline_before(w)?,
+            KeyCode::Delete => buffer.delete_newline_after(w)?,
             _ => {}
         };
     }
