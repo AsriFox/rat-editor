@@ -182,26 +182,8 @@ where W: io::Write,
             KeyCode::Down => buffer.move_cursor_v(w, 1)?,
             KeyCode::PageUp => buffer.scroll(w, -1)?,
             KeyCode::PageDown => buffer.scroll(w, 1)?,
+            KeyCode::Enter => buffer.newline(w)?,
             /*
-            KeyCode::Enter => {
-                let (col, _) = cursor::position()?;
-                let new_line = if (col as usize) < buffer[i].len() {
-                    buffer[i].split_off(col as usize)
-                } else {
-                    String::new()
-                };
-                if new_line.len() > 0 || i < buffer.len() - 1 {
-                    i += 1;
-                    buffer.insert(i, new_line);
-                    queue_reprint(w, &buffer)?;
-                    queue!(w, cursor::MoveTo(0, i as u16))?;
-                    w.flush()?;
-                } else if i == buffer.len() - 1 {
-                    i += 1;
-                    buffer.push(String::new());
-                    w.execute(cursor::MoveToNextLine(1))?;
-                }
-            }
             KeyCode::Backspace => {
                 i -= 1;
                 let col = buffer[i].len() as u16;

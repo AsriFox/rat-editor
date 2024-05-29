@@ -112,4 +112,32 @@ impl Buffer {
         w.execute(cursor::MoveToColumn((self.cursor_pos.0 as u16).min(self.lines[i].len() as u16)))?;
         Ok(())
     }
+
+    pub fn newline_after<W>(&mut self, w: &mut W, new_line: String) -> Rs<()>
+    where W: Write {
+        let i = self.scroll_pos + self.cursor_pos.1 as usize + 1;
+        self.lines.insert(i, new_line);
+        self.cursor_pos = (0, self.cursor_pos.1);
+        self.move_cursor_v(w, 1)?;
+        if self.cursor_pos.1 + 1 < self.term_size.1 {
+            self.queue_reprint(w)?;
+            queue!(w, cursor::MoveTo(self.cursor_pos.0, self.cursor_pos.1))?;
+            w.flush()?;
+        }
+        Ok(())
+    }
+
+    pub fn newline<W>(&mut self, w: &mut W) -> Rs<()>
+    where W: Write {
+        let i = self.scroll_pos + self.cursor_pos.1 as usize;
+        if self.cursor_pos.0 as usize >= self.lines[i].len() {
+            // Append line
+            self.newline_after(w, String::new())?;
+        } else {
+            // Split line
+            let new_line = self.lines[i].split_off(self.cursor_pos.0 as usize);
+            self.newline_after(w, new_line)?;
+        }
+        Ok(())
+    }
 }
