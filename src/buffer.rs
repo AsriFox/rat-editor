@@ -1,8 +1,11 @@
-use std::io::{Write, Result as Rs};
+use std::io::{Result as Rs, Write};
 
 use crossterm::{
-    execute, queue,
-    style, terminal, cursor,
+    cursor,
+    execute,
+    queue,
+    style,
+    terminal,
     //event::KeyCode,
     ExecutableCommand,
 };
@@ -30,27 +33,32 @@ impl Buffer {
     }
 
     pub fn queue_reprint<W>(&self, w: &mut W) -> Rs<()>
-    where W: Write {
+    where
+        W: Write,
+    {
         queue!(
             w,
             terminal::Clear(terminal::ClearType::All),
             cursor::MoveTo(0, 0),
         )?;
         let scroll_bottom = (self.scroll_pos + self.term_size.1 as usize).min(self.lines.len());
-        let wp = self.lines.get(self.scroll_pos..scroll_bottom).expect("Not enough lines in the buffer");
+        let wp = self
+            .lines
+            .get(self.scroll_pos..scroll_bottom)
+            .expect("Not enough lines in the buffer");
         for line in wp {
-            queue!(
-                w,
-                style::Print(line),
-                cursor::MoveToNextLine(1),
-            )?;
+            queue!(w, style::Print(line), cursor::MoveToNextLine(1),)?;
         }
         Ok(())
     }
-    
+
     pub fn scroll<W>(&mut self, w: &mut W, delta: isize) -> Rs<()>
-    where W: Write {
-        if delta == 0 { return Ok(()); }
+    where
+        W: Write,
+    {
+        if delta == 0 {
+            return Ok(());
+        }
         w.execute(cursor::SavePosition)?;
 
         if delta < 0 {
@@ -63,7 +71,8 @@ impl Buffer {
             }
         } else if self.lines.len() - 1 > self.term_size.1 as usize {
             // Scroll down
-            let new_scroll_pos = (self.scroll_pos + delta as usize).min(self.lines.len() - 1 - self.term_size.1 as usize);
+            let new_scroll_pos = (self.scroll_pos + delta as usize)
+                .min(self.lines.len() - 1 - self.term_size.1 as usize);
             if self.scroll_pos != new_scroll_pos {
                 self.scroll_pos = new_scroll_pos;
                 self.queue_reprint(w)?;
@@ -87,8 +96,12 @@ impl Buffer {
     }
 
     pub fn move_cursor_v<W>(&mut self, w: &mut W, delta_row: i16) -> Rs<()>
-    where W: Write {
-        if delta_row == 0 { return Ok(()); }
+    where
+        W: Write,
+    {
+        if delta_row == 0 {
+            return Ok(());
+        }
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
         if i as i16 + delta_row < 0 || (i as i16 + delta_row) as usize > self.lines.len() - 1 {
             return Ok(());
@@ -109,12 +122,16 @@ impl Buffer {
         }
 
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
-        w.execute(cursor::MoveToColumn((self.cursor_pos.0 as u16).min(self.lines[i].len() as u16)))?;
+        w.execute(cursor::MoveToColumn(
+            (self.cursor_pos.0 as u16).min(self.lines[i].len() as u16),
+        ))?;
         Ok(())
     }
 
     pub fn newline_after<W>(&mut self, w: &mut W, new_line: String) -> Rs<()>
-    where W: Write {
+    where
+        W: Write,
+    {
         let i = self.scroll_pos + self.cursor_pos.1 as usize + 1;
         self.lines.insert(i, new_line);
         self.cursor_pos = (0, self.cursor_pos.1);
@@ -128,7 +145,9 @@ impl Buffer {
     }
 
     pub fn newline<W>(&mut self, w: &mut W) -> Rs<()>
-    where W: Write {
+    where
+        W: Write,
+    {
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
         if self.cursor_pos.0 as usize >= self.lines[i].len() {
             // Append line
@@ -142,7 +161,9 @@ impl Buffer {
     }
 
     pub fn delete_newline_before<W>(&mut self, w: &mut W) -> Rs<()>
-    where W: Write {
+    where
+        W: Write,
+    {
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
         if i == 0 {
             return Ok(());
@@ -160,7 +181,9 @@ impl Buffer {
     }
 
     pub fn delete_newline_after<W>(&mut self, w: &mut W) -> Rs<()>
-    where W: Write {
+    where
+        W: Write,
+    {
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
         if i >= self.lines.len() - 1 {
             return Ok(());
@@ -174,4 +197,3 @@ impl Buffer {
         Ok(())
     }
 }
-

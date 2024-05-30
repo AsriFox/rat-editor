@@ -18,13 +18,13 @@ impl EditorCmd {
                 KeyCode::Char(c) => match c {
                     'q' => Some(Self::Exit),
                     _ => None,
-                }
+                },
                 KeyCode::Up => Some(Self::Scroll(-1)),
                 KeyCode::Down => Some(Self::Scroll(1)),
                 KeyCode::Home => Some(Self::JumpToStart),
                 KeyCode::End => Some(Self::JumpToEnd),
                 _ => None,
-            }
+            },
             KeyModifiers::NONE => match code {
                 KeyCode::Up => Some(Self::MoveCursor(-1)),
                 KeyCode::Down => Some(Self::MoveCursor(1)),
@@ -38,9 +38,8 @@ impl EditorCmd {
                 }
                 KeyCode::Enter => Some(Self::Newline),
                 _ => None,
-            }
+            },
             _ => None,
         }
     }
 }
-

@@ -3,12 +3,7 @@ pub mod command;
 
 use std::io::{self, prelude::*};
 
-use crossterm::{
-    execute, queue,
-    style, terminal, cursor,
-    event::KeyCode,
-    ExecutableCommand,
-};
+use crossterm::{cursor, event::KeyCode, execute, queue, style, terminal, ExecutableCommand};
 
 use command::EditorCmd;
 
@@ -17,8 +12,7 @@ enum EditorState {
     InsertMode { after: String },
 }
 
-impl EditorState
-{
+impl EditorState {
     fn split_buf(&self, buf: &mut String) -> io::Result<String> {
         let after = match self {
             Self::CursorMode => {
@@ -30,8 +24,9 @@ impl EditorState
         Ok(after)
     }
 
-    pub fn print<W>(self, w: &mut W, buf: &mut String, c: char) -> io::Result<EditorState> 
-    where W: io::Write,
+    pub fn print<W>(self, w: &mut W, buf: &mut String, c: char) -> io::Result<EditorState>
+    where
+        W: io::Write,
     {
         let after = self.split_buf(buf)?;
         buf.push(c);
@@ -49,7 +44,8 @@ impl EditorState
     }
 
     pub fn erase_left<W>(self, w: &mut W, buf: &mut String) -> io::Result<EditorState>
-    where W: io::Write,
+    where
+        W: io::Write,
     {
         let after = self.split_buf(buf)?;
         buf.pop();
@@ -73,7 +69,8 @@ impl EditorState
     }
 
     pub fn erase_right<W>(self, w: &mut W, buf: &mut String) -> io::Result<EditorState>
-    where W: io::Write,
+    where
+        W: io::Write,
     {
         let after = match self {
             Self::CursorMode => self.split_buf(buf)?,
@@ -89,7 +86,9 @@ impl EditorState
             style::Print(' '),
             cursor::MoveLeft(after.len() as u16 + 1),
         )?;
-        Ok(Self::InsertMode { after: String::from(after) })
+        Ok(Self::InsertMode {
+            after: String::from(after),
+        })
     }
 
     pub fn cursor_mode(self, buf: &mut String) -> io::Result<EditorState> {
@@ -104,7 +103,8 @@ impl EditorState
 }
 
 fn typing_synced<W>(w: &mut W, buf: &mut String) -> io::Result<EditorCmd>
-where W: io::Write,
+where
+    W: io::Write,
 {
     use crossterm::event::{read, Event, KeyEvent, KeyEventKind};
     let mut state = EditorState::CursorMode;
@@ -114,7 +114,8 @@ where W: io::Write,
             kind: KeyEventKind::Press,
             modifiers,
             state: _,
-        }) = read()? {
+        }) = read()?
+        {
             (code, modifiers)
         } else {
             continue;
@@ -138,7 +139,7 @@ where W: io::Write,
             KeyCode::Delete => match state.erase_right(w, buf)? {
                 EditorState::InsertMode { after } => EditorState::InsertMode { after },
                 EditorState::CursorMode => return Ok(EditorCmd::DeleteNewlineAfter),
-            }
+            },
             KeyCode::Left => {
                 w.execute(cursor::MoveLeft(1))?;
                 state.cursor_mode(buf)?
@@ -165,18 +166,15 @@ where W: io::Write,
 }
 
 fn run<W>(w: &mut W, lines: Vec<String>) -> io::Result<()>
-where W: io::Write,
+where
+    W: io::Write,
 {
     execute!(w, terminal::EnterAlternateScreen)?;
     terminal::enable_raw_mode()?;
 
     let mut buffer = buffer::Buffer::new(lines)?;
 
-    queue!(
-        w,
-        style::ResetColor,
-        cursor::SetCursorStyle::BlinkingBar,
-    )?;
+    queue!(w, style::ResetColor, cursor::SetCursorStyle::BlinkingBar,)?;
     buffer.queue_reprint(w)?;
     queue!(w, cursor::MoveTo(0, 0))?;
     w.flush()?;
@@ -227,18 +225,15 @@ fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let lines = if args.len() >= 2 {
         let file = std::fs::File::open(&args[1])?;
-        let lines: Vec<String> =
-            std::io::BufReader::new(file)
+        let lines: Vec<String> = std::io::BufReader::new(file)
             .lines()
             .map(|l| l.expect("Could not parse line"))
             .collect();
         if lines.len() == 0 {
-            return Err(
-                io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("File {} is empty", &args[1])
-                )
-            );
+            return Err(io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("File {} is empty", &args[1]),
+            ));
         }
         lines
     } else {
@@ -253,4 +248,3 @@ fn main() -> io::Result<()> {
     let mut stdout = io::stdout();
     run(&mut stdout, lines)
 }
-
