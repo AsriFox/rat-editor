@@ -206,6 +206,22 @@ where
             EditorCmd::Newline => buffer.newline(w)?,
             EditorCmd::DeleteNewlineBefore => buffer.delete_newline_before(w)?,
             EditorCmd::DeleteNewlineAfter => buffer.delete_newline_after(w)?,
+            EditorCmd::Save => {
+                execute!(w, cursor::SavePosition, terminal::LeaveAlternateScreen)?;
+                let file_name = save_dialog(w)?;
+                if file_name.len() > 0 {
+                    match std::fs::File::create_new(&file_name) {
+                        Ok(mut file) => file.write_all(buffer.lines.join("\n").as_bytes())?,
+                        Err(_) => {
+                            // TODO: ask for overwrite confirmation
+                        }
+                    }
+                }
+                w.execute(terminal::EnterAlternateScreen)?;
+                buffer.queue_reprint(w)?;
+                queue!(w, cursor::RestorePosition)?;
+                w.flush()?;
+            }
             EditorCmd::Exit => break,
         }
     }
@@ -219,6 +235,56 @@ where
 
     terminal::disable_raw_mode()?;
     Ok(())
+}
+
+fn save_dialog<W>(w: &mut W) -> io::Result<String>
+where
+    W: io::Write,
+{
+    use crossterm::event::{read, Event, KeyEvent, KeyEventKind};
+    let mut file_name = String::new();
+    execute!(
+        w,
+        terminal::Clear(terminal::ClearType::CurrentLine),
+        style::Print("Save to file: ")
+    )?;
+    loop {
+        if let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Press,
+            modifiers: _,
+            state: _,
+        }) = read()?
+        {
+            match code {
+                KeyCode::Char(c) => {
+                    file_name.push(c);
+                    w.execute(style::Print(c))?;
+                }
+                KeyCode::Backspace => {
+                    file_name.pop();
+                    execute!(
+                        w,
+                        cursor::MoveLeft(1),
+                        style::Print(' '),
+                        cursor::MoveLeft(1)
+                    )?;
+                }
+                KeyCode::Enter => {
+                    if file_name.len() > 0 {
+                        w.execute(cursor::MoveToNextLine(1))?;
+                        break;
+                    }
+                }
+                KeyCode::Esc => {
+                    file_name.clear();
+                    break;
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(file_name)
 }
 
 fn main() -> io::Result<()> {

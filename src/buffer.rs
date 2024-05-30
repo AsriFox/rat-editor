@@ -11,7 +11,7 @@ use crossterm::{
 };
 
 pub struct Buffer {
-    lines: Vec<String>,
+    pub lines: Vec<String>,
     cursor_pos: (u16, u16),
     scroll_pos: usize,
     term_size: (u16, u16),

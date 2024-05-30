@@ -8,6 +8,7 @@ pub enum EditorCmd {
     Newline,
     DeleteNewlineBefore,
     DeleteNewlineAfter,
+    Save,
     Exit,
 }
 
@@ -16,6 +17,7 @@ impl EditorCmd {
         match modifiers {
             KeyModifiers::CONTROL => match code {
                 KeyCode::Char(c) => match c {
+                    's' => Some(Self::Save),
                     'q' => Some(Self::Exit),
                     _ => None,
                 },
