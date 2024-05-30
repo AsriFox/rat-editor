@@ -150,6 +150,15 @@ where W: io::Write,
                 }
                 new_state
             }
+            KeyCode::Home => {
+                w.execute(cursor::MoveToColumn(0))?;
+                state.cursor_mode(buf)?
+            }
+            KeyCode::End => {
+                let new_state = state.cursor_mode(buf)?;
+                w.execute(cursor::MoveToColumn(buf.len() as u16))?;
+                new_state
+            }
             _ => continue,
         };
     }
@@ -178,6 +187,24 @@ where W: io::Write,
         match edcmd {
             EditorCmd::MoveCursor(i) => buffer.move_cursor_v(w, i)?,
             EditorCmd::Scroll(i) => buffer.scroll(w, i)?,
+            EditorCmd::JumpToStart => {
+                if let (0, 0) = cursor::position()? {
+                    continue;
+                }
+                w.execute(cursor::MoveTo(0, 0))?;
+                buffer.save_cursor_pos()?;
+                buffer.scroll(w, isize::MIN)?;
+            }
+            EditorCmd::JumpToEnd => {
+                let (x, y) = terminal::size()?;
+                if cursor::position()?.1 == y {
+                    w.execute(cursor::MoveToColumn(buffer.get_line().len() as u16))?;
+                } else {
+                    w.execute(cursor::MoveTo(x, y))?;
+                    buffer.save_cursor_pos()?;
+                    buffer.scroll(w, isize::MAX)?;
+                }
+            }
             EditorCmd::Newline => buffer.newline(w)?,
             EditorCmd::DeleteNewlineBefore => buffer.delete_newline_before(w)?,
             EditorCmd::DeleteNewlineAfter => buffer.delete_newline_after(w)?,

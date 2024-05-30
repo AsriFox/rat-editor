@@ -2,6 +2,8 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 pub enum EditorCmd {
     MoveCursor(i16),
+    JumpToStart,
+    JumpToEnd,
     Scroll(isize),
     Newline,
     DeleteNewlineBefore,
@@ -19,6 +21,8 @@ impl EditorCmd {
                 }
                 KeyCode::Up => Some(Self::Scroll(-1)),
                 KeyCode::Down => Some(Self::Scroll(1)),
+                KeyCode::Home => Some(Self::JumpToStart),
+                KeyCode::End => Some(Self::JumpToEnd),
                 _ => None,
             }
             KeyModifiers::NONE => match code {
