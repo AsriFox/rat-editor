@@ -1,4 +1,5 @@
 mod buffer;
+pub mod command;
 
 use std::io::{self, prelude::*};
 
@@ -8,6 +9,8 @@ use crossterm::{
     event::KeyCode,
     ExecutableCommand,
 };
+
+use command::EditorCmd;
 
 enum EditorState {
     CursorMode,
@@ -100,22 +103,27 @@ impl EditorState
     }
 }
 
-fn typing_synced<W>(w: &mut W, buf: &mut String) -> io::Result<KeyCode>
+fn typing_synced<W>(w: &mut W, buf: &mut String) -> io::Result<EditorCmd>
 where W: io::Write,
 {
     use crossterm::event::{read, Event, KeyEvent, KeyEventKind};
     let mut state = EditorState::CursorMode;
     loop {
-        let code = if let Event::Key(KeyEvent {
+        let (code, modifiers) = if let Event::Key(KeyEvent {
             code,
             kind: KeyEventKind::Press,
-            modifiers: _,
+            modifiers,
             state: _,
         }) = read()? {
-            code
+            (code, modifiers)
         } else {
             continue;
         };
+
+        if let Some(c) = EditorCmd::from_key(code, modifiers) {
+            let _ = state.cursor_mode(buf)?;
+            return Ok(c);
+        }
 
         let (col, _) = cursor::position()?;
         state = match code {
@@ -123,13 +131,13 @@ where W: io::Write,
             KeyCode::Backspace => {
                 if col == 0 {
                     let _ = state.cursor_mode(buf)?;
-                    return Ok(KeyCode::Backspace);
+                    return Ok(EditorCmd::DeleteNewlineBefore);
                 }
                 state.erase_left(w, buf)?
             }
             KeyCode::Delete => match state.erase_right(w, buf)? {
                 EditorState::InsertMode { after } => EditorState::InsertMode { after },
-                EditorState::CursorMode => return Ok(KeyCode::Delete),
+                EditorState::CursorMode => return Ok(EditorCmd::DeleteNewlineAfter),
             }
             KeyCode::Left => {
                 w.execute(cursor::MoveLeft(1))?;
@@ -141,12 +149,6 @@ where W: io::Write,
                     w.execute(cursor::MoveRight(1))?;
                 }
                 new_state
-            }
-            KeyCode::Up | KeyCode::Down
-            | KeyCode::PageUp | KeyCode::PageDown
-            | KeyCode::Enter | KeyCode::Esc => {
-                let _ = state.cursor_mode(buf)?;
-                return Ok(code);
             }
             _ => continue,
         };
@@ -171,27 +173,16 @@ where W: io::Write,
     w.flush()?;
 
     loop {
-        match {
-            let code = typing_synced(w, buffer.get_line())?;
-            buffer.save_cursor_pos()?;
-            code
-        } {
-            KeyCode::Esc => break,
-            KeyCode::Up => buffer.move_cursor_v(w, -1)?,
-            KeyCode::Down => buffer.move_cursor_v(w, 1)?,
-            KeyCode::PageUp => {
-                let (_, h) = terminal::size()?;
-                buffer.scroll(w, -(h as isize) / 2)?;
-            }
-            KeyCode::PageDown => {
-                let (_, h) = terminal::size()?;
-                buffer.scroll(w, (h as isize) / 2)?;
-            }
-            KeyCode::Enter => buffer.newline(w)?,
-            KeyCode::Backspace => buffer.delete_newline_before(w)?,
-            KeyCode::Delete => buffer.delete_newline_after(w)?,
-            _ => {}
-        };
+        let edcmd = typing_synced(w, buffer.get_line())?;
+        buffer.save_cursor_pos()?;
+        match edcmd {
+            EditorCmd::MoveCursor(i) => buffer.move_cursor_v(w, i)?,
+            EditorCmd::Scroll(i) => buffer.scroll(w, i)?,
+            EditorCmd::Newline => buffer.newline(w)?,
+            EditorCmd::DeleteNewlineBefore => buffer.delete_newline_before(w)?,
+            EditorCmd::DeleteNewlineAfter => buffer.delete_newline_after(w)?,
+            EditorCmd::Exit => break,
+        }
     }
 
     execute!(
