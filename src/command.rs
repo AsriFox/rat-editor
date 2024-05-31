@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 pub enum EditorCmd {
     MoveCursor(i16),
@@ -13,6 +13,19 @@ pub enum EditorCmd {
 }
 
 impl EditorCmd {
+    pub fn from(event: Event) -> Option<Self> {
+        match event {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                state: _,
+            }) => Self::from_key(code, modifiers),
+            //Event::Resize(w, h) => Self::Resize(w, h),
+            _ => None,
+        }
+    }
+
     pub fn from_key(code: KeyCode, modifiers: KeyModifiers) -> Option<Self> {
         match modifiers {
             KeyModifiers::CONTROL => match code {

@@ -4,6 +4,7 @@ pub mod command;
 use std::io::{self, prelude::*};
 
 use crossterm::{cursor, event::KeyCode, execute, queue, style, terminal, ExecutableCommand};
+use ratatui::{prelude::*, widgets::*};
 
 use command::EditorCmd;
 
@@ -287,6 +288,32 @@ where
     Ok(file_name)
 }
 
+fn ui(frame: &mut Frame, buffer: &crate::buffer::Buffer, file_name: &str) {
+    let layout = Layout::new(
+        Direction::Vertical,
+        [Constraint::Min(0), Constraint::Length(1)],
+    )
+    .split(frame.size());
+    frame.render_widget(
+        Paragraph::new(Text::from_iter(buffer.lines.iter().map(|s| Line::raw(s)))).scroll((0, 0)),
+        layout[0],
+    );
+    frame.render_widget(
+        Paragraph::new(file_name).style(Style::new().black().on_white()),
+        layout[1],
+    );
+    frame.set_cursor(0, 0);
+}
+
+fn handle_events() -> io::Result<EditorCmd> {
+    let e = loop {
+        if let Some(e) = EditorCmd::from(crossterm::event::read()?) {
+            break e;
+        }
+    };
+    Ok(e)
+}
+
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let lines = if args.len() >= 2 {
@@ -306,11 +333,34 @@ fn main() -> io::Result<()> {
         vec![String::new()]
     };
 
+    let buffer = crate::buffer::Buffer::new(lines)?;
+
     std::panic::set_hook(Box::new(|info| {
         eprintln!("{:?}", info);
         terminal::disable_raw_mode().unwrap();
     }));
 
-    let mut stdout = io::stdout();
-    run(&mut stdout, lines)
+    terminal::enable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        terminal::EnterAlternateScreen,
+        cursor::SetCursorStyle::BlinkingBar,
+    )?;
+    let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
+
+    loop {
+        term.draw(|frame| ui(frame, &buffer, &args[1]))?;
+        if let EditorCmd::Exit = handle_events()? {
+            break;
+        }
+    }
+
+    terminal::disable_raw_mode()?;
+    execute!(
+        io::stdout(),
+        terminal::LeaveAlternateScreen,
+        cursor::SetCursorStyle::DefaultUserShape
+    )?;
+    Ok(())
+    //run(&mut stdout, lines)
 }
