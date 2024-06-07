@@ -5,6 +5,7 @@ pub enum EditorCmd {
     JumpToStart,
     JumpToEnd,
     Scroll(isize),
+    Resize(u16, u16),
     Newline,
     DeleteNewlineBefore,
     DeleteNewlineAfter,
@@ -21,7 +22,7 @@ impl EditorCmd {
                 modifiers,
                 state: _,
             }) => Self::from_key(code, modifiers),
-            //Event::Resize(w, h) => Self::Resize(w, h),
+            Event::Resize(w, h) => Some(Self::Resize(w, h)),
             _ => None,
         }
     }

@@ -33,6 +33,10 @@ impl Buffer {
         })
     }
 
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.term_size = (width, height);
+    }
+
     pub fn get_line<'a>(&'a mut self) -> &'a mut String {
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
         return &mut self.lines[i];

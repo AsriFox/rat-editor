@@ -204,6 +204,7 @@ where
                     buffer.scroll(w, isize::MAX)?;
                 }
             }
+            EditorCmd::Resize(_, _) => {}
             EditorCmd::Newline => buffer.newline(w)?,
             EditorCmd::DeleteNewlineBefore => buffer.delete_newline_before(w)?,
             EditorCmd::DeleteNewlineAfter => buffer.delete_newline_after(w)?,
@@ -330,7 +331,7 @@ fn main() -> io::Result<()> {
         vec![String::new()]
     };
 
-    let buffer = crate::buffer::Buffer::new(lines)?;
+    let mut buffer = crate::buffer::Buffer::new(lines)?;
 
     std::panic::set_hook(Box::new(|info| {
         eprintln!("{:?}", info);
@@ -345,10 +346,16 @@ fn main() -> io::Result<()> {
     )?;
     let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
 
+    // FIX: get size from layout
+    let Rect { width, height, .. } = term.size()?;
+    buffer.resize(width, height - 1);
+
     loop {
         term.draw(|frame| ui(frame, &buffer, &args[1]))?;
-        if let EditorCmd::Exit = handle_events()? {
-            break;
+        match handle_events()? {
+            EditorCmd::Exit => break,
+            EditorCmd::Resize(width, height) => buffer.resize(width, height - 1),
+            _ => {}
         }
     }
 
