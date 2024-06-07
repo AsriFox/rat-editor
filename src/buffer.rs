@@ -18,6 +18,7 @@ use ratatui::{
 
 pub struct Buffer {
     pub lines: Vec<String>,
+    /// Deprecated
     cursor_pos: (u16, u16),
     scroll_pos: usize,
     term_size: (u16, u16),
@@ -62,41 +63,19 @@ impl Buffer {
         Ok(())
     }
 
-    pub fn scroll<W>(&mut self, w: &mut W, delta: isize) -> Rs<()>
+    pub fn scroll<W>(&mut self, _w: &mut W, delta: isize) -> Rs<()>
     where
         W: Write,
     {
-        if delta == 0 {
-            return Ok(());
-        }
-        w.execute(cursor::SavePosition)?;
-
-        if delta < 0 {
-            // Scroll up
-            let new_scroll_pos = (self.scroll_pos as isize + delta as isize).max(0) as usize;
-            if self.scroll_pos != new_scroll_pos {
-                self.scroll_pos = new_scroll_pos;
-                self.queue_reprint(w)?;
-                w.flush()?;
+        use std::cmp::Ordering::*;
+        self.scroll_pos = match delta.cmp(&0) {
+            Less => self.scroll_pos.saturating_add_signed(delta),
+            Greater => {
+                let scroll_max = self.lines.len().saturating_sub(self.term_size.1 as usize);
+                (self.scroll_pos + delta as usize).min(scroll_max)
             }
-        } else if self.lines.len() - 1 > self.term_size.1 as usize {
-            // Scroll down
-            let new_scroll_pos = (self.scroll_pos + delta as usize)
-                .min(self.lines.len() - 1 - self.term_size.1 as usize);
-            if self.scroll_pos != new_scroll_pos {
-                self.scroll_pos = new_scroll_pos;
-                self.queue_reprint(w)?;
-                w.flush()?;
-            }
-        }
-
-        let i = self.scroll_pos + self.cursor_pos.1 as usize;
-        execute!(
-            w,
-            cursor::RestorePosition,
-            cursor::MoveToColumn((self.cursor_pos.0 as u16).min(self.lines[i].len() as u16)),
-        )?;
-
+            Equal => return Ok(()),
+        };
         Ok(())
     }
 

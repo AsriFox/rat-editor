@@ -354,6 +354,9 @@ fn main() -> io::Result<()> {
         term.draw(|frame| ui(frame, &buffer, &args[1]))?;
         match handle_events()? {
             EditorCmd::Exit => break,
+            EditorCmd::Scroll(delta) => buffer.scroll(term.backend_mut(), delta)?,
+            EditorCmd::JumpToStart => buffer.scroll(term.backend_mut(), isize::MIN)?,
+            EditorCmd::JumpToEnd => buffer.scroll(term.backend_mut(), isize::MAX)?,
             EditorCmd::Resize(width, height) => buffer.resize(width, height - 1),
             _ => {}
         }
