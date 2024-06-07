@@ -38,6 +38,12 @@ impl Buffer {
         self.term_size = (width, height);
     }
 
+    pub fn cursor(&self) -> (u16, u16) {
+        let (x, y) = self.cursor_pos;
+        let i = self.scroll_pos + y as usize;
+        ((x as usize).min(self.lines[i].len()) as u16, y)
+    }
+
     pub fn get_line<'a>(&'a mut self) -> &'a mut String {
         let i = self.scroll_pos + self.cursor_pos.1 as usize;
         return &mut self.lines[i];
@@ -91,29 +97,31 @@ impl Buffer {
         if delta_row == 0 {
             return Ok(());
         }
-        let i = self.scroll_pos + self.cursor_pos.1 as usize;
-        if i as i16 + delta_row < 0 || (i as i16 + delta_row) as usize > self.lines.len() - 1 {
-            return Ok(());
-        }
+        let (x, y) = self.cursor_pos;
 
-        let new_pos = self.cursor_pos.1 as i16 + delta_row;
-        if new_pos < 0 {
-            //w.execute(cursor::MoveToRow(0))?;
-            self.cursor_pos = (self.cursor_pos.0, 0);
-            self.scroll(w, new_pos as isize)?;
-        } else if new_pos as u16 > self.term_size.1 - 1 {
-            //w.execute(cursor::MoveToRow(self.term_size.1 - 1))?;
-            self.cursor_pos = (self.cursor_pos.0, self.term_size.1 - 1);
-            self.scroll(w, new_pos as isize - self.term_size.1 as isize + 1)?;
+        let i = match (self.scroll_pos + y as usize).checked_add_signed(delta_row as isize) {
+            Some(i) => {
+                if i > self.lines.len() - 1 {
+                    return Ok(());
+                } else {
+                    i
+                }
+            }
+            None => return Ok(()),
+        };
+        let x = (x as usize).min(self.lines[i].len()) as u16;
+
+        let y = y as i16 + delta_row;
+        if y < 0 {
+            self.cursor_pos = (x, 0);
+            self.scroll(w, y as isize)?;
+        } else if let Some(delta) = (y as u16).checked_sub(self.term_size.1 - 1) {
+            self.cursor_pos = (x, self.term_size.1 - 1);
+            self.scroll(w, delta as isize)?;
         } else {
-            self.cursor_pos = (self.cursor_pos.0, new_pos as u16);
-            w.execute(cursor::MoveToRow(new_pos as u16))?;
+            self.cursor_pos = (x, y as u16);
         }
 
-        let i = self.scroll_pos + self.cursor_pos.1 as usize;
-        w.execute(cursor::MoveToColumn(
-            (self.cursor_pos.0 as u16).min(self.lines[i].len() as u16),
-        ))?;
         Ok(())
     }
 

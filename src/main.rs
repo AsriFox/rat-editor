@@ -300,7 +300,8 @@ fn ui(frame: &mut Frame, buffer: &crate::buffer::Buffer, file_name: &str) {
         Paragraph::new(file_name).style(Style::new().black().on_white()),
         layout[1],
     );
-    frame.set_cursor(0, 0);
+    let (x, y) = buffer.cursor();
+    frame.set_cursor(x, y);
 }
 
 fn handle_events() -> io::Result<EditorCmd> {
@@ -354,6 +355,7 @@ fn main() -> io::Result<()> {
         term.draw(|frame| ui(frame, &buffer, &args[1]))?;
         match handle_events()? {
             EditorCmd::Exit => break,
+            EditorCmd::MoveCursor(delta) => buffer.move_cursor_v(term.backend_mut(), delta)?,
             EditorCmd::Scroll(delta) => buffer.scroll(term.backend_mut(), delta)?,
             EditorCmd::JumpToStart => buffer.scroll(term.backend_mut(), isize::MIN)?,
             EditorCmd::JumpToEnd => buffer.scroll(term.backend_mut(), isize::MAX)?,
