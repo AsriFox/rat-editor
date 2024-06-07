@@ -10,6 +10,12 @@ use crossterm::{
     ExecutableCommand,
 };
 
+use ratatui::{
+    layout::Rect,
+    text::{Line, Text},
+    widgets::{Paragraph, Widget},
+};
+
 pub struct Buffer {
     pub lines: Vec<String>,
     cursor_pos: (u16, u16),
@@ -195,5 +201,27 @@ impl Buffer {
         queue!(w, cursor::RestorePosition)?;
         w.flush()?;
         Ok(())
+    }
+
+    pub fn widget<'a>(&'a self) -> Renderer<'a> {
+        Renderer(self)
+    }
+}
+
+pub struct Renderer<'a>(&'a Buffer);
+
+impl<'a> Widget for Renderer<'a> {
+    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+        let top_row = self.0.scroll_pos;
+        let bottom_row = self.0.lines.len().min(top_row + area.height as usize);
+        let text = Text::from_iter(
+            self.0
+                .lines
+                .iter()
+                .skip(top_row)
+                .take(bottom_row - top_row)
+                .map(|s| Line::raw(s)),
+        );
+        Paragraph::new(text).render(area, buf);
     }
 }

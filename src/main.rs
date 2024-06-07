@@ -294,10 +294,7 @@ fn ui(frame: &mut Frame, buffer: &crate::buffer::Buffer, file_name: &str) {
         [Constraint::Min(0), Constraint::Length(1)],
     )
     .split(frame.size());
-    frame.render_widget(
-        Paragraph::new(Text::from_iter(buffer.lines.iter().map(|s| Line::raw(s)))).scroll((0, 0)),
-        layout[0],
-    );
+    frame.render_widget(buffer.widget(), layout[0]);
     frame.render_widget(
         Paragraph::new(file_name).style(Style::new().black().on_white()),
         layout[1],
